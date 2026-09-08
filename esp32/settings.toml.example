@@ -1,0 +1,4 @@
+# Copy to settings.toml on the CIRCUITPY drive and fill in your network.
+# 2.4 GHz only -- the ESP32-S3 cannot join a 5 GHz SSID.
+CIRCUITPY_WIFI_SSID = "your-network-name"
+CIRCUITPY_WIFI_PASSWORD = "your-password"

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.onair</string>
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Absolute path required. Edit before installing. -->
+        <string>/Users/YOUR_USERNAME/onair-sign/mac/onair</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ONAIR_FEED</key>
+        <string>onair</string>
+        <key>ONAIR_EXCLUDE</key>
+        <string>OBS Virtual Camera</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/onair.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/Library/Logs/onair.log</string>
+</dict>
+</plist>

@@ -1,0 +1,11 @@
+# Built binary
+mac/onair
+mac/*.dSYM/
+
+# Never commit these: real credentials live in ~/.config/onair/credentials.json
+# and on the board itself, but guard against a stray copy.
+**/credentials.json
+esp32/settings.toml
+
+.DS_Store
+._*
