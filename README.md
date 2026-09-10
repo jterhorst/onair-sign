@@ -306,7 +306,18 @@ not read as yellow — it reads as green with a faint warm cast. A convincing
 orange needed red at level 5 against green at 3. Do not reason about these
 panels in sRGB; put candidates side by side on the hardware and pick by eye.
 
-### 9. Build the staleness fallback first
+### 9. Not every meeting is a Google Meet
+
+The obvious filter is `hangoutLink`, which only exists for Meet. Zoom, Teams
+and Webex all come back empty, so real meetings silently vanish from the sign.
+Use `conferenceData.entryPoints` and look for an `entryPointType` of `video`;
+Google populates it for anything added through a calendar add-on.
+
+Fall back to scanning location and body only for invites that just paste a
+URL, and match join-link *paths*. Bare `zoom.us` also fires on `docs.zoom.us`
+and `applications.zoom.us`.
+
+### 10. Build the staleness fallback first
 
 If the Mac sleeps mid-meeting and the sign has no timeout, it stays lit on ON
 AIR indefinitely — worse than having no sign, because people stop trusting it.

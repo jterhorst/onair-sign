@@ -324,7 +324,7 @@
                   font-size="11" fill="var(--led-blue)">meeting</text>
           </svg>
         </div>
-        <p><strong>Free, with a call ahead.</strong> Earliest Meet across every Google account you connect.</p>
+        <p><strong>Free, with a call ahead.</strong> Earliest call across every Google account you connect — Meet, Zoom, Teams or Webex.</p>
       </div>
       <div class="state">
         <div class="screen">
@@ -466,7 +466,7 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
   </section>
 
   <section>
-    <h2>Eight traps</h2>
+    <h2>Nine traps</h2>
     <p class="sub">The parts are easy. These are what actually cost me time — skip straight here if you build one.</p>
 
     <div class="traps">
@@ -516,6 +516,13 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
         <h3>8. Equal red and green is not yellow</h3>
         <p class="symptom">0x555500 &rarr; reads plainly green</p>
         <p>Green LEDs are far more luminous per unit drive than red, so driving both channels equally does not produce yellow &mdash; it produces green with a faint warm cast. A convincing orange needed red at level 5 against green at 3. Do not reason about these panels in sRGB; put candidates side by side on the hardware and pick by eye.</p>
+      </div>
+
+      <div class="trap">
+        <h3>9. Not every meeting is a Google Meet</h3>
+        <p class="symptom">filtered on hangoutLink → every Zoom call invisible</p>
+        <p>The obvious filter is <code>hangoutLink</code>, which only exists for Meet. Zoom, Teams and Webex all came back empty, so real meetings silently vanished from the sign. Use <code>conferenceData.entryPoints</code> and look for an <code>entryPointType</code> of <code>video</code> &mdash; Google populates it for anything added through a calendar add-on, whoever hosts it.</p>
+        <p>Fall back to scanning the location and body only for invites that just paste a URL, and match join-link <em>paths</em> rather than domains. Matching bare <code>zoom.us</code> also fires on <code>docs.zoom.us</code> and <code>applications.zoom.us</code>, both of which appear inside genuine invite bodies; <code>zoom.us/j/</code> does not.</p>
       </div>
     </div>
   </section>

@@ -12,14 +12,14 @@ import Security
 // Several accounts are supported. Each keeps its own refresh token, and may
 // carry its own OAuth client for domains that will not authorize a shared one.
 
-/// The next Meet that has not started yet.
+/// The next video call that has not started yet.
 struct Meeting {
     let time: String
     let title: String
     let account: String
 }
 
-/// A Meet that is happening right now.
+/// A video call that is happening right now.
 struct ActiveMeeting {
     let until: String
     let title: String
@@ -290,10 +290,17 @@ final class GoogleAccount {
                     case responseStatus
                 }
             }
+            struct ConferenceData: Decodable {
+                struct EntryPoint: Decodable {
+                    let entryPointType: String?
+                }
+                let entryPoints: [EntryPoint]?
+            }
             let summary: String?
             let status: String?
             let start: When?
             let end: When?
+            let conferenceData: ConferenceData?
             let hangoutLink: String?
             let location: String?
             let description: String?
@@ -306,14 +313,30 @@ final class GoogleAccount {
         event.attendees?.contains { $0.isSelf == true && $0.responseStatus == "declined" } ?? false
     }
 
-    private func hasMeetLink(_ event: EventList.Event) -> Bool {
+    /// Join-link shapes only. Bare "zoom.us" would also match documentation
+    /// and add-on marketplace URLs that turn up in invite bodies.
+    private static let joinLinks = [
+        "meet.google.com/",
+        "zoom.us/j/", "zoom.us/my/",
+        "teams.microsoft.com/l/meetup-join",
+        "webex.com/meet", "webex.com/j.php",
+    ]
+
+    /// Whether the event has a video call attached, whoever hosts it.
+    private func hasVideoLink(_ event: EventList.Event) -> Bool {
+        // Structured and provider-agnostic: Google populates this for Meet and
+        // for Zoom, Teams and Webex added through a calendar add-on.
+        if event.conferenceData?.entryPoints?
+            .contains(where: { $0.entryPointType == "video" }) == true { return true }
         if event.hangoutLink?.isEmpty == false { return true }
+
+        // Fallback for invites that only paste a URL into the location or body.
         let haystack = [event.location, event.description]
             .compactMap { $0 }.joined(separator: " ").lowercased()
-        return haystack.contains("meet.google.com")
+        return Self.joinLinks.contains { haystack.contains($0) }
     }
 
-    /// This account's in-progress Meet and its next upcoming one.
+    /// This account's in-progress video call and its next upcoming one.
     ///
     /// Google's `timeMin` filters on an event's *end*, so a meeting already
     /// under way comes back from the same query as the upcoming ones.
@@ -345,7 +368,7 @@ final class GoogleAccount {
                   let startStamp = event.start?.dateTime,   // nil for all-day events
                   let start = rfc3339.date(from: startStamp),
                   !declined(event),
-                  hasMeetLink(event) else { continue }
+                  hasVideoLink(event) else { continue }
             let title = event.summary ?? "Meeting"
 
             if start > now {
