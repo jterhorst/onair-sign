@@ -1,17 +1,18 @@
 # onair-sign
 
 An LED panel that turns red the moment any app touches your Mac's camera, so
-the people you live with know not to walk into a meeting. When you're free it
-shows the start time of your next Google Meet, and otherwise a dim clock.
+the people you live with know not to walk into a meeting. It goes orange when
+you're in a call with the camera off, shows the start time of your next Google
+Meet when you're free, and otherwise a dim clock.
 
 ```
-  camera live          camera idle, call ahead        everything else
- ┌──────────────┐      ┌──────────────┐               ┌──────────────┐
- │   ON AIR     │      │   10:30 AM   │               │              │
- │              │      │     next     │               │     2:47     │
- │              │      │   meeting    │               │              │
- └──────────────┘      └──────────────┘               └──────────────┘
-      red              grey + blue                        dim grey
+   camera live        in a call, camera off      call ahead        everything else
+ ┌──────────────┐      ┌──────────────┐      ┌──────────────┐    ┌──────────────┐
+ │  On camera   │      │  in meeting  │      │   10:30 AM   │    │              │
+ │  ends 11:30  │      │  ends 11:30  │      │     next     │    │     2:47     │
+ │              │      │              │      │   meeting    │    │              │
+ └──────────────┘      └──────────────┘      └──────────────┘    └──────────────┘
+       red                  orange              grey + blue          dim grey
 ```
 
 Roughly $60 in parts, no soldering, an evening's work.
@@ -78,11 +79,16 @@ The heartbeat is what lets the sign tell "camera is off" apart from "the Mac
 has gone away".
 
 Payload is one JSON string. **Meeting titles are never published** — the
-daemon resolves them, logs them locally, and sends only the start time:
+daemon resolves them, logs them locally, and sends only times. `active` is the
+meeting under way and when it ends; `next` is the one still to come:
 
 ```json
-{"live": false, "cameras": [], "next": {"time": "10:30 AM"}}
+{"live": false, "cameras": [], "active": {"until": "11:30"}, "next": {"time": "10:30 AM"}}
 ```
+
+Google's `timeMin` filters on an event's *end*, so a meeting already in
+progress comes back from the same query as the upcoming ones — no second
+request needed.
 
 ### Do you need the relay?
 
@@ -184,7 +190,9 @@ against that one account; the rest keep using the shared client.
 | `ONAIR_EXCLUDE` | `OBS Virtual Camera` | comma-separated devices to ignore |
 
 Firmware constants live at the top of `esp32/code.py`: `BRIGHTNESS`,
-`STALE_AFTER`, `RESYNC_EVERY`, and the four colours.
+`STALE_AFTER`, `RESYNC_EVERY`, and the colours. Everything sits at level 5 of
+16 except the clock at level 4, so the panel stays glanceable rather than
+glaring.
 
 ---
 
@@ -215,7 +223,7 @@ Measured: about **1.6 s** from opening Photo Booth to the panel turning red,
 
 Device names come from `kCMIOObjectPropertyName` on the same objects, which is
 how `ONAIR_EXCLUDE` works — an OBS Virtual Camera left running would otherwise
-pin the sign to ON AIR all day.
+pin the sign to *On camera* all day.
 
 ---
 
@@ -283,14 +291,22 @@ boundaries to the minute, across several years.
 Covered under [Setup](#google-calendar). The Testing-status trap is the nasty
 one: it fails silently a week after you stop paying attention.
 
-### 7. The built-in font can't fill the panel
+### 7. Ten characters, and not one more
 
-`terminalio.FONT` is 6 px wide and reaches half the panel height at
-`scale=2`. "ON AIR" is six characters — 72 px on a 64 px panel. The letters
-here come from a hand-built 5×7 glyph set stretched 2× wide and 3× tall, which
-lands at 60 px and looks better than the font would have.
+`terminalio.FONT` is 6 px wide, so a 64 px panel holds exactly ten characters.
+Write the copy to that budget before you fall in love with it: `until 11:30`
+is eleven and clipped a pixel off each edge, while `ends 11:30` fits exactly.
+Text bigger than `scale=1` means hand-building a glyph set, which is real work
+for a handful of characters.
 
-### 8. Build the staleness fallback first
+### 8. Equal red and green is not yellow
+
+Green LEDs are far more luminous per unit drive than red, so `0x555500` does
+not read as yellow — it reads as green with a faint warm cast. A convincing
+orange needed red at level 5 against green at 3. Do not reason about these
+panels in sRGB; put candidates side by side on the hardware and pick by eye.
+
+### 9. Build the staleness fallback first
 
 If the Mac sleeps mid-meeting and the sign has no timeout, it stays lit on ON
 AIR indefinitely — worse than having no sign, because people stop trusting it.

@@ -12,10 +12,23 @@ import Security
 // Several accounts are supported. Each keeps its own refresh token, and may
 // carry its own OAuth client for domains that will not authorize a shared one.
 
+/// The next Meet that has not started yet.
 struct Meeting {
     let time: String
     let title: String
     let account: String
+}
+
+/// A Meet that is happening right now.
+struct ActiveMeeting {
+    let until: String
+    let title: String
+    let account: String
+}
+
+struct Schedule {
+    var active: ActiveMeeting?
+    var next: Meeting?
 }
 
 // MARK: - Stored credentials
@@ -280,6 +293,7 @@ final class GoogleAccount {
             let summary: String?
             let status: String?
             let start: When?
+            let end: When?
             let hangoutLink: String?
             let location: String?
             let description: String?
@@ -299,11 +313,15 @@ final class GoogleAccount {
         return haystack.contains("meet.google.com")
     }
 
-    /// The next Google Meet on this account starting later today.
-    func nextMeeting() throws -> (start: Date, title: String)? {
+    /// This account's in-progress Meet and its next upcoming one.
+    ///
+    /// Google's `timeMin` filters on an event's *end*, so a meeting already
+    /// under way comes back from the same query as the upcoming ones.
+    func meetings() throws -> (active: (end: Date, title: String)?,
+                               next: (start: Date, title: String)?) {
         let now = Date()
         guard let endOfDay = Calendar.current.date(
-            bySettingHour: 23, minute: 59, second: 59, of: now) else { return nil }
+            bySettingHour: 23, minute: 59, second: 59, of: now) else { return (nil, nil) }
 
         var components = URLComponents(
             string: "https://www.googleapis.com/calendar/v3/calendars/primary/events")!
@@ -319,16 +337,27 @@ final class GoogleAccount {
         let list = try JSONDecoder().decode(
             EventList.self, from: send(try authorized(components.url!)))
 
+        var active: (end: Date, title: String)?
+        var next: (start: Date, title: String)?
+
         for event in list.items ?? [] {
             guard event.status != "cancelled",
-                  let stamp = event.start?.dateTime,        // nil for all-day events
-                  let start = rfc3339.date(from: stamp),
-                  start > now,
+                  let startStamp = event.start?.dateTime,   // nil for all-day events
+                  let start = rfc3339.date(from: startStamp),
                   !declined(event),
                   hasMeetLink(event) else { continue }
-            return (start, event.summary ?? "Meeting")
+            let title = event.summary ?? "Meeting"
+
+            if start > now {
+                if next == nil { next = (start, title) }
+                continue
+            }
+            // Started already: still active only while its end is ahead of us.
+            guard let endStamp = event.end?.dateTime,
+                  let end = rfc3339.date(from: endStamp), end > now else { continue }
+            if active == nil || end < active!.end { active = (end, title) }
         }
-        return nil
+        return (active, next)
     }
 }
 
@@ -469,6 +498,13 @@ final class GoogleCalendar {
         return formatter
     }()
 
+    /// No day period -- "until 2:30" has to fit 64px of panel.
+    private let shortClock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("hmm")
+        return formatter
+    }()
+
     enum Failure: LocalizedError {
         case notConfigured
         case noAccounts
@@ -504,25 +540,34 @@ final class GoogleCalendar {
 
     var emails: [String] { accounts.map(\.email) }
 
-    /// The earliest upcoming Meet across every authorized account.
-    /// One account failing does not hide the others.
-    func nextMeeting() -> Meeting? {
-        var soonest: (start: Date, title: String, email: String)?
+    /// Across every authorized account: the meeting happening now, and the
+    /// next one to start. One account failing does not hide the others.
+    func schedule() -> Schedule {
+        var soonestEnd: (end: Date, title: String, email: String)?
+        var soonestStart: (start: Date, title: String, email: String)?
 
         for account in accounts {
             do {
-                guard let found = try account.nextMeeting() else { continue }
-                if soonest == nil || found.start < soonest!.start {
-                    soonest = (found.start, found.title, account.email)
+                let found = try account.meetings()
+                if let a = found.active, soonestEnd == nil || a.end < soonestEnd!.end {
+                    soonestEnd = (a.end, a.title, account.email)
+                }
+                if let n = found.next, soonestStart == nil || n.start < soonestStart!.start {
+                    soonestStart = (n.start, n.title, account.email)
                 }
             } catch {
                 log("calendar \(account.email): \(error.localizedDescription)")
             }
         }
 
-        guard let soonest else { return nil }
-        return Meeting(time: clock.string(from: soonest.start),
-                       title: soonest.title,
-                       account: soonest.email)
+        return Schedule(
+            active: soonestEnd.map {
+                ActiveMeeting(until: shortClock.string(from: $0.end),
+                              title: $0.title, account: $0.email)
+            },
+            next: soonestStart.map {
+                Meeting(time: clock.string(from: $0.start),
+                        title: $0.title, account: $0.email)
+            })
     }
 }

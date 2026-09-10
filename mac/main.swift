@@ -84,7 +84,7 @@ func liveCameras() -> [String] {
 var calendar: GoogleCalendar?
 var calendarWarned = false
 
-func refreshMeeting() -> Meeting? {
+func refreshSchedule() -> Schedule {
     if calendar == nil {
         do {
             calendar = try GoogleCalendar()
@@ -94,10 +94,10 @@ func refreshMeeting() -> Meeting? {
                 log("calendar disabled: \(error.localizedDescription)")
                 calendarWarned = true
             }
-            return nil
+            return Schedule()
         }
     }
-    return calendar?.nextMeeting()
+    return calendar?.schedule() ?? Schedule()
 }
 
 func prompt(_ label: String) -> String {
@@ -152,10 +152,16 @@ func runAuthorization(hint: String?) -> Never {
         print("\nAuthorized \(result.email)")
         print("Accounts now configured: \(accounts.map(\.email).joined(separator: ", "))")
 
-        if let calendar = try? GoogleCalendar(), let meeting = calendar.nextMeeting() {
-            print("Next meeting today: \(meeting.time)  (\(meeting.account))")
-        } else {
-            print("No upcoming meeting with a Meet link today.")
+        if let calendar = try? GoogleCalendar() {
+            let found = calendar.schedule()
+            if let active = found.active {
+                print("In a meeting until \(active.until)  (\(active.account))")
+            }
+            if let next = found.next {
+                print("Next meeting today: \(next.time)  (\(next.account))")
+            } else if found.active == nil {
+                print("No upcoming meeting with a Meet link today.")
+            }
         }
         exit(0)
     } catch {
@@ -189,7 +195,7 @@ let session: URLSession = {
     return URLSession(configuration: config)
 }()
 
-func report(live: Bool, cameras: [String], meeting: Meeting?) {
+func report(live: Bool, cameras: [String], schedule: Schedule) {
     guard let stored = CredentialStore.load(),
           let user = stored.aioUsername, let key = stored.aioKey else {
         if !aioWarned {
@@ -199,10 +205,13 @@ func report(live: Bool, cameras: [String], meeting: Meeting?) {
         return
     }
 
+    // Only times are published; titles never leave this machine.
     var state: [String: Any] = ["live": live, "cameras": cameras]
-    if let meeting {
-        // Only the time is published; the title never leaves this machine.
-        state["next"] = ["time": meeting.time]
+    if let active = schedule.active {
+        state["active"] = ["until": active.until]
+    }
+    if let next = schedule.next {
+        state["next"] = ["time": next.time]
     }
     guard let stateData = try? JSONSerialization.data(withJSONObject: state),
           let url = URL(string:
@@ -270,16 +279,21 @@ if !excludedDevices.isEmpty {
 
 var lastLive: Bool?
 var lastReported = Date.distantPast
-var meeting: Meeting?
+var schedule = Schedule()
 var meetingCheckedAt = Date.distantPast
 
 while true {
     if Date().timeIntervalSince(meetingCheckedAt) >= calendarRefreshInterval {
-        let found = refreshMeeting()
-        if found?.title != meeting?.title || found?.time != meeting?.time {
-            log(found.map { "next: \($0.time) \($0.title) [\($0.account)]" } ?? "next: none today")
+        let found = refreshSchedule()
+        if found.active?.until != schedule.active?.until {
+            log(found.active.map { "active: until \($0.until) \($0.title) [\($0.account)]" }
+                ?? "active: none")
         }
-        meeting = found
+        if found.next?.time != schedule.next?.time || found.next?.title != schedule.next?.title {
+            log(found.next.map { "next: \($0.time) \($0.title) [\($0.account)]" }
+                ?? "next: none today")
+        }
+        schedule = found
         meetingCheckedAt = Date()
     }
 
@@ -291,7 +305,7 @@ while true {
         if changed {
             log(live ? "ON  \(cameras.joined(separator: ", "))" : "OFF")
         }
-        report(live: live, cameras: cameras, meeting: meeting)
+        report(live: live, cameras: cameras, schedule: schedule)
         lastLive = live
         lastReported = Date()
     }

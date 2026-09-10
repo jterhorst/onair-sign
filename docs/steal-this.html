@@ -16,6 +16,7 @@
     --led-red: #FF3B2E;
     --led-dim: #6E6E6E;
     --led-blue: #4477FF;
+    --led-orange: #FF9A2E;
     --panel: #0A0A0C;
 
     --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
@@ -268,7 +269,7 @@
     <p class="lede">An LED panel on my desk turns red the second any app touches my camera, so my wife knows not to walk into a meeting. When I'm free it shows my next call.</p>
 
     <div class="marquee">
-      <svg viewBox="0 0 320 120" role="img" aria-label="An LED matrix panel reading ON AIR in red">
+      <svg viewBox="0 0 320 120" role="img" aria-label="An LED matrix panel reading On camera above ends 11:30, in red">
         <defs>
           <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse">
             <rect width="5" height="5" fill="#0A0A0C"/>
@@ -276,8 +277,10 @@
           </pattern>
         </defs>
         <rect width="320" height="120" fill="url(#dots)"/>
-        <text x="160" y="76" text-anchor="middle" font-family="IBM Plex Mono, monospace"
-              font-size="52" font-weight="600" letter-spacing="2" fill="var(--led-red)">ON AIR</text>
+        <text x="160" y="52" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+              font-size="30" letter-spacing="1" fill="var(--led-red)">On camera</text>
+        <text x="160" y="94" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+              font-size="30" letter-spacing="1" fill="var(--led-red)">ends 11:30</text>
       </svg>
     </div>
   </header>
@@ -287,13 +290,27 @@
     <div class="states">
       <div class="state">
         <div class="screen">
-          <svg viewBox="0 0 128 64" role="img" aria-label="Panel reading ON AIR in red">
+          <svg viewBox="0 0 128 64" role="img" aria-label="Panel reading On camera above ends 11:30 in red">
             <rect width="128" height="64" fill="#0A0A0C"/>
-            <text x="64" y="42" text-anchor="middle" font-family="IBM Plex Mono, monospace"
-                  font-size="25" font-weight="600" fill="var(--led-red)">ON AIR</text>
+            <text x="64" y="26" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+                  font-size="13" fill="var(--led-red)">On camera</text>
+            <text x="64" y="48" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+                  font-size="13" fill="var(--led-red)">ends 11:30</text>
           </svg>
         </div>
-        <p><strong>Camera live.</strong> Any app, any camera. Detected in about a second.</p>
+        <p><strong>Camera live.</strong> Any app, any camera. Detected in about a second, with the meeting's end time if there is one.</p>
+      </div>
+      <div class="state">
+        <div class="screen">
+          <svg viewBox="0 0 128 64" role="img" aria-label="Panel reading in meeting above ends 11:30 in orange">
+            <rect width="128" height="64" fill="#0A0A0C"/>
+            <text x="64" y="26" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+                  font-size="13" fill="var(--led-orange)">in meeting</text>
+            <text x="64" y="48" text-anchor="middle" font-family="IBM Plex Mono, monospace"
+                  font-size="13" fill="var(--led-orange)">ends 11:30</text>
+          </svg>
+        </div>
+        <p><strong>In a call, camera off.</strong> Still busy, just not on video.</p>
       </div>
       <div class="state">
         <div class="screen">
@@ -317,7 +334,7 @@
                   font-size="13" fill="var(--led-dim)">2:47</text>
           </svg>
         </div>
-        <p><strong>Everything else.</strong> A dim clock. Also the fallback when the Mac sleeps, so it is never stuck on ON AIR.</p>
+        <p><strong>Everything else.</strong> A dim clock. Also the fallback when the Mac sleeps, so it is never stuck showing you as busy.</p>
       </div>
     </div>
   </section>
@@ -344,7 +361,7 @@
       </div>
     </div>
     <p>The relay exists only because corporate WARP blocks LAN traffic between the two (trap 3 below). On a normal network the board can just run an HTTP server and the Mac can POST straight to it — simpler, and nothing leaves the house.</p>
-    <p>Only a start time is ever published. Meeting titles stay on the machine.</p>
+    <p>Only times are ever published &mdash; when the current meeting ends, and when the next one starts. Meeting titles stay on the machine.</p>
   </section>
 
   <section>
@@ -434,7 +451,7 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
     return value != 0
 }</code></pre>
 
-    <p>That is the load-bearing part. Names come from <code>kCMIOObjectPropertyName</code> on the same objects, which is how you exclude a virtual camera — an OBS Virtual Camera left running would otherwise pin the sign to ON AIR all day.</p>
+    <p>That is the load-bearing part. Names come from <code>kCMIOObjectPropertyName</code> on the same objects, which is how you exclude a virtual camera — an OBS Virtual Camera left running would otherwise pin the sign to <em>On camera</em> all day.</p>
 
     <h3>Why this beats every other approach</h3>
     <ul style="margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.4rem;font-size:.95rem;">
@@ -449,7 +466,7 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
   </section>
 
   <section>
-    <h2>Seven traps</h2>
+    <h2>Eight traps</h2>
     <p class="sub">The parts are easy. These are what actually cost me time — skip straight here if you build one.</p>
 
     <div class="traps">
@@ -490,9 +507,15 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
       </div>
 
       <div class="trap">
-        <h3>7. The built-in font cannot fill the panel</h3>
-        <p class="symptom">"ON AIR" at scale 2 = 72px on a 64px panel</p>
-        <p><code>terminalio.FONT</code> is 6&nbsp;px wide and reaches half the panel height at <code>scale=2</code>. Six characters do not fit on one line. Either accept small text, or hand-build a glyph set — a 5&times;7 grid stretched 2&times; wide and 3&times; tall lands at 60&nbsp;px and looks better than the font would have.</p>
+        <h3>7. Ten characters, and not one more</h3>
+        <p class="symptom">"until 11:30" = 11 chars = 66px on a 64px panel</p>
+        <p><code>terminalio.FONT</code> is 6&nbsp;px wide, so a 64&nbsp;px panel holds exactly ten characters. Write the copy to that budget before you fall in love with it: <code>until 11:30</code> overflowed by one and clipped a pixel off each edge, while <code>ends 11:30</code> fits exactly. Text bigger than <code>scale=1</code> means hand-building a glyph set, which is real work for a handful of characters.</p>
+      </div>
+
+      <div class="trap">
+        <h3>8. Equal red and green is not yellow</h3>
+        <p class="symptom">0x555500 &rarr; reads plainly green</p>
+        <p>Green LEDs are far more luminous per unit drive than red, so driving both channels equally does not produce yellow &mdash; it produces green with a faint warm cast. A convincing orange needed red at level 5 against green at 3. Do not reason about these panels in sRGB; put candidates side by side on the hardware and pick by eye.</p>
       </div>
     </div>
   </section>
@@ -500,7 +523,7 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
   <section>
     <h2>If you build one</h2>
     <p>Two pieces of code: a Swift daemon on the Mac and a CircuitPython <code>code.py</code> on the board. Neither is long. The daemon runs as a <code>launchd</code> agent with <code>KeepAlive</code>; the board runs unattended off flash and needs nothing but power and 2.4&nbsp;GHz WiFi — the ESP32-S3 has no 5&nbsp;GHz radio, so check your SSID actually carries a 2.4&nbsp;GHz band before you order.</p>
-    <p>Build in a staleness fallback from the start. If the Mac sleeps mid-meeting and the sign has no timeout, it stays lit on ON AIR indefinitely, which is worse than having no sign. Mine falls back to the clock after 90 seconds of silence.</p>
+    <p>Build in a staleness fallback from the start. If the Mac sleeps mid-meeting and the sign has no timeout, it stays lit as busy indefinitely, which is worse than having no sign. Mine falls back to the clock after 90 seconds of silence.</p>
     <p>Ping me for the source and I will send it over.</p>
   </section>
 

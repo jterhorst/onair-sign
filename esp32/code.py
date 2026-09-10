@@ -4,9 +4,10 @@
 # cannot reach each other on the LAN -- corporate WARP swallows the subnet.
 # Both ends can reach the public internet, so io.adafruit.com is the relay.
 #
-# Camera live    -> big red ON AIR
+# Camera live    -> red "On camera", with "ends <time>" if a meeting is on
+# In a meeting   -> orange "in meeting" / "ends <time>", camera off
 # Meeting ahead  -> grey start time above a blue "next meeting"
-# Anything else  -> full-panel clock, US Central, never times out
+# Anything else  -> dim clock, US Central, never times out
 #
 # The clock is the resting state. It runs off the board's own monotonic
 # counter, so it survives the Mac sleeping, the daemon stopping, and
@@ -42,6 +43,8 @@ RESYNC_EVERY = 3600
 # scaling all three channels together (3:6:15 -> 1:2:5).
 CLOCK_DIM = 0x444444   # level 4
 RED = 0x550000         # level 5
+ORANGE = 0x553300      # red at level 5, green held to 3 -- equal R and G
+                       # reads green on these panels, so green is pulled down
 GRAY = 0x555555        # level 5
 BLUE = 0x112255        # level 5 on blue, hue preserved
 
@@ -80,40 +83,24 @@ def row(y, color, scale=1):
     return label
 
 
-# "ON AIR" is six characters; terminalio at scale 2 would be 72px on a 64px
-# panel, so the letters are drawn from a 5x7 set stretched 2x wide, 3x tall.
-GLYPHS = {
-    "O": (".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
-    "N": ("#...#", "##..#", "##..#", "#.#.#", "#..##", "#..##", "#...#"),
-    "A": (".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
-    "I": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"),
-    "R": ("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
-    " ": ("     ",) * 7,
-}
-
-live_bitmap = displayio.Bitmap(64, 32, 2)
-live_palette = displayio.Palette(2)
-live_palette[0] = 0x000000
-live_palette[1] = RED
-live_group = displayio.Group()
-live_group.append(displayio.TileGrid(live_bitmap, pixel_shader=live_palette))
-scene.append(live_group)
+# Camera and in-meeting states: two centred rows, recoloured per state.
+# At 6px per character a 64px panel holds 10, which "in meeting" and
+# "ends 2:30" both fit.
+duo_group = displayio.Group()
+duo_rows = [row(11, RED), row(22, RED)]
+for label in duo_rows:
+    duo_group.append(label)
+scene.append(duo_group)
 
 
-def draw_glyphs(bitmap, text, x, y, scale_x, scale_y):
-    for char in text:
-        for row, pattern in enumerate(GLYPHS[char]):
-            for column, pixel in enumerate(pattern):
-                if pixel != "#":
-                    continue
-                for dy in range(scale_y):
-                    for dx in range(scale_x):
-                        bitmap[x + column * scale_x + dx, y + row * scale_y + dy] = 1
-        x += 5 * scale_x
+def show_duo(color, first, second):
+    """One or two centred rows. A single line sits in the middle."""
+    for label in duo_rows:
+        label.color = color
+    duo_rows[0].text = first
+    duo_rows[1].text = second
+    duo_rows[0].anchored_position = (32, 11 if second else 16)
 
-
-# Static, so it is drawn once and then just shown or hidden.
-draw_glyphs(live_bitmap, "ON AIR", 2, 5, 2, 3)
 
 meeting_group = displayio.Group()
 clock_row = row(5, GRAY)
@@ -217,30 +204,36 @@ def render(mode, meeting=None):
         key = ("clock", clock_text())
     elif mode == "meeting":
         key = ("meeting", meeting["time"])
+    elif mode in ("camera", "inmeeting"):
+        key = (mode, (meeting or {}).get("until", ""))
     else:
         key = (mode, "")
     if key == current:
         return
     current = key
 
-    live_group.hidden = mode != "live"
+    duo_group.hidden = mode not in ("camera", "inmeeting")
     meeting_group.hidden = mode != "meeting"
     clock_group.hidden = mode != "clock"
 
     if mode == "clock":
-        print('clock:', key[1])
+        print("clock:", key[1])
         clock_label.text = key[1]
     elif mode == "meeting":
         clock_row.text = meeting["time"]
         label_rows[0].text = "next"
         label_rows[1].text = "meeting"
+    elif mode == "camera":
+        show_duo(RED, "On camera", "ends %s" % key[1] if key[1] else "")
+    elif mode == "inmeeting":
+        show_duo(ORANGE, "in meeting", "ends %s" % key[1] if key[1] else "")
 
 
 def show_boot(message):
     """Startup progress, before any state is known."""
     global current
     current = None
-    live_group.hidden = True
+    duo_group.hidden = True
     clock_group.hidden = True
     meeting_group.hidden = False
     clock_row.text = message
@@ -280,6 +273,7 @@ mqtt_client = MQTT.MQTT(
 io = IO_MQTT(mqtt_client)
 
 live = False
+active_meeting = None
 next_meeting = None
 last_message = -STALE_AFTER  # start on the clock, not on a stale meeting
 
@@ -292,17 +286,19 @@ def on_connect(client):
 
 
 def on_message(client, feed_id, payload):
-    global live, next_meeting, last_message
+    global live, active_meeting, next_meeting, last_message
     try:
         state = json.loads(payload)
     except ValueError:
         print("bad payload:", payload)
         return
     live = bool(state.get("live"))
+    active_meeting = state.get("active")
     next_meeting = state.get("next")
     last_message = time.monotonic()
-    print("state:", "ON AIR" if live else "idle",
-          (next_meeting or {}).get("time", "clock"))
+    print("state:", "camera" if live else "idle",
+          "until " + active_meeting["until"] if active_meeting
+          else (next_meeting or {}).get("time", "clock"))
 
 
 io.on_connect = on_connect
@@ -343,9 +339,13 @@ while True:
         sync_clock()
 
     age = time.monotonic() - last_message
-    if live and age <= STALE_AFTER:
-        render("live")
-    elif next_meeting and age <= STALE_AFTER:
+    if age > STALE_AFTER:
+        render("clock")          # the Mac has gone quiet
+    elif live:
+        render("camera", active_meeting)
+    elif active_meeting:
+        render("inmeeting", active_meeting)
+    elif next_meeting:
         render("meeting", next_meeting)
     else:
         render("clock")
