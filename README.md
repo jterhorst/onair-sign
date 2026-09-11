@@ -90,15 +90,6 @@ Google's `timeMin` filters on an event's *end*, so a meeting already in
 progress comes back from the same query as the upcoming ones — no second
 request needed.
 
-### Do you need the relay?
-
-Probably not. It exists here only because corporate VPN policy blocks LAN
-traffic between the Mac and the board (see [trap 3](#3-a-vpn-can-swallow-your-lan)).
-On a normal network the board can run `adafruit_httpserver`, advertise itself
-over mDNS, and the Mac can `POST` straight to `http://onair.local/state` —
-simpler, lower latency, and nothing leaves the house. That variant was tested
-and worked; only the routing between the two ends failed.
-
 ---
 
 ## Setup
@@ -264,8 +255,8 @@ its entries, so local traffic routed into the tunnel and died. Always-On and
 Switch-Locked, so it can't simply be turned off.
 
 The tell is a `100.64.0.0/10` (CGNAT) source address in a failed `curl`. Fix
-is an IT request to exclude `192.168.0.0/16`, or relay through something
-public — which is why this repo talks to Adafruit IO instead of the LAN.
+is to relay through something public, which is why this talks to Adafruit IO
+rather than the LAN.
 
 ### 4. CircuitPython floats are single precision
 

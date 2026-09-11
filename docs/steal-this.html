@@ -360,7 +360,7 @@
         <span class="how">CircuitPython &middot; MQTT push</span>
       </div>
     </div>
-    <p>The relay exists only because corporate WARP blocks LAN traffic between the two (trap 3 below). On a normal network the board can just run an HTTP server and the Mac can POST straight to it — simpler, and nothing leaves the house.</p>
+    <p>A public relay rather than the LAN, because corporate WARP blocks local traffic between the two (trap 3 below). It also means the board does not care where the Mac is — same desk or another building, it works the same.</p>
     <p>Only times are ever published &mdash; when the current meeting ends, and when the next one starts. Meeting titles stay on the machine.</p>
   </section>
 
@@ -485,7 +485,7 @@ func isStreaming(_ device: CMIOObjectID) -&gt; Bool {
       <div class="trap">
         <h3>3. Cloudflare WARP swallows your LAN</h3>
         <p class="symptom">route -n get 192.168.x.x   →   interface: utun0</p>
-        <p>Mac and board sat on the same subnet and could not reach each other in either direction. WARP runs in Exclude mode with <strong>no RFC1918 range</strong> among its entries, so local traffic routes into the tunnel and dies. It is Always-On and Switch-Locked, so you cannot just turn it off. Either file an IT request to exclude <code>192.168.0.0/16</code>, or relay through something public. The giveaway is a <code>100.64.0.0/10</code> source address in a failed <code>curl</code>.</p>
+        <p>Mac and board sat on the same subnet and could not reach each other in either direction. WARP runs in Exclude mode with <strong>no RFC1918 range</strong> among its entries, so local traffic routes into the tunnel and dies. It is Always-On and Switch-Locked, so you cannot just turn it off &mdash; relay through something public instead and stop fighting it. The giveaway is a <code>100.64.0.0/10</code> source address in a failed <code>curl</code>.</p>
       </div>
 
       <div class="trap">
